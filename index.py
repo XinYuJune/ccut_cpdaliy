@@ -8,7 +8,6 @@ import random
 import base64
 import sys
 import json
-import os
 import re
 import time
 import traceback
@@ -22,8 +21,8 @@ DELAY = 0
 ####################################################
 ###########!!!!!消息推送!!!!!#######################
 ###################################################
-# push_plus推送token,可以实现微信推送日志(https://pushplus.hxtrip.com),不需要消息推送的话可以不填
-PUSHPLUS_token = ''
+# Qmsg酱推送KEy,QQ消息推送,不需要消息推送的话可以不填
+QMSG_KEY = ''
 # 日志推送级别
 PUSH_LEVEL = 1
 ######################################################
@@ -37,7 +36,7 @@ SECRET_KEY = '你的SECRET_KEY'
 #################!!!!DES加密密钥!!!!###################
 #######################################################
 DESKEY = 'b3L26XNL'
-APPVERSION = '8.2.22'
+APPVERSION = '9.0.7'
 #######################################################
 ############！！！！获取任务的接口！！！！###############
 #######################################################
@@ -74,7 +73,7 @@ if 'CLOUDPASSWORD' in locals().keys():
 if 'CLOUDDELAY' in locals().keys():
     DELAY = locals().get('CLOUDDELAY')
 if 'CLOUDPUSHTOKEN' in locals().keys():
-    PUSHPLUS_token = locals().get('CLOUDPUSHTOKEN')
+    QMSG_KEY = locals().get('CLOUDPUSHTOKEN')
 if 'CLOUDAPP_ID' in locals().keys():
     APP_ID = locals().get('CLOUDAPP_ID')
 if 'CLOUDAPI_KEY' in locals().keys():
@@ -90,14 +89,14 @@ MAX_Captcha_Times = 20
 
 
 class Util:  # 统一的类
-    logs = 'V2021.5.19'
+    logs = 'V2021.6.17'
     OCRclient = None
 
     @staticmethod
     def GetDate(Mod='%Y-%m-%d %H:%M:%S', offset=0):
         utc_dt = datetime.utcnow().replace(tzinfo=timezone.utc)
         bj_dt = utc_dt.astimezone(timezone(timedelta(hours=8)))
-        bj_dt=bj_dt-timedelta(days=offset)
+        bj_dt = bj_dt-timedelta(days=offset)
         return bj_dt.strftime(Mod)
 
     @staticmethod
@@ -162,8 +161,8 @@ class Util:  # 统一的类
         if len(lt) == 0:
             Util.log("获取lt失败")
             return None
-        lt=lt[0]
-        PostUrl = '{}://{}/iap/doLogin'.format(protocol,host)
+        lt = lt[0]
+        PostUrl = '{}://{}/iap/doLogin'.format(protocol, host)
         Params = {}
         Params['username'] = user['username']
         Params['password'] = user['password']
@@ -171,43 +170,48 @@ class Util:  # 统一的类
         Params['mobile'] = ''
         Params['dllt'] = ''
         Params['captcha'] = ''
-        ltUrl='{}://{}/iap/security/lt'.format(protocol,host)
+        ltUrl = '{}://{}/iap/security/lt'.format(protocol, host)
         LoginHeaders = headers
         LoginHeaders['Content-Type'] = 'application/x-www-form-urlencoded'
-        res=session.post(url=ltUrl,data={'lt':lt},headers=LoginHeaders)
+        res = session.post(url=ltUrl, data={'lt': lt}, headers=LoginHeaders)
         if res.status_code != 200:
             Util.log("申请lt失败")
             return None
-        res=res.json()['result']
-        Params['lt']=res['_lt']
-        needCaptcha=res['needCaptcha']
-        # 判断是否需要验证码
-        if needCaptcha:
-            captchaUrl = '{}://{}/iap/generateCaptcha'.format(protocol, host)
-            for i in range(MAX_Captcha_Times):
-                Captcha = session.get(url=captchaUrl, headers=headers)
-                code = Util.captchaOCR(Captcha.content)
-                # api qps限制
-                time.sleep(0.5)
-                if len(code) != 5:
-                    continue
-                Params['captcha'] = code
-                res = session.post(PostUrl,data=Params,headers=LoginHeaders,allow_redirects=False)
-                if 'Location' in res.headers or res.json()['resultCode'] == 'FAIL_UPNOTMATCH':
-                    # 验证码登录成功或者密码错误
-                    break
-                if i == MAX_Captcha_Times-1:
-                    Util.log("验证码识别超过最大次数")
-        else:
-            res = session.post(PostUrl,data=Params,headers=LoginHeaders,allow_redirects=False)
+        res = res.json()['result']
+        Params['lt'] = res['_lt']
+        #新版验证码，直接POST，结果会说明是否需要验证码
+        res = session.post(PostUrl, data=Params,
+                           headers=LoginHeaders, allow_redirects=False)
         if 'Location' not in res.headers:
-            reason=res.json()['resultCode']
+            reason = res.json()['resultCode']
             if reason == 'FORCE_MOD_PASS':
                 Util.log("请重置密码后重试！")
+                return None
             elif reason == 'FAIL_UPNOTMATCH':
                 Util.log("用户名或密码错误！")
-            Util.log("登录失败")
-            return None
+                return None
+            #需要验证码登录
+            elif reason == 'CAPTCHA_NOTMATCH':
+                captchaUrl = '{}://{}/iap/generateCaptcha?ltId={}'.format(
+                    protocol, host, Params['lt'])
+                for i in range(MAX_Captcha_Times):
+                    Captcha = session.get(url=captchaUrl, headers=headers)
+                    code = Util.captchaOCR(Captcha.content)
+                    # api qps限制
+                    time.sleep(0.5)
+                    if len(code) != 5:
+                        continue
+                    Params['captcha'] = code
+                    res = session.post(
+                        PostUrl, data=Params, headers=LoginHeaders, allow_redirects=False)
+                    if 'Location' in res.headers:
+                        # 验证码登录成功或者密码错误
+                        break
+                    elif res.json()['resultCode'] == 'FAIL_UPNOTMATCH':
+                        Util.log("用户名或密码错误！")
+                        return None
+                    if i == MAX_Captcha_Times-1:
+                        Util.log("验证码识别超过最大次数")
         nexturl = res.headers['Location']
         headers['host'] = School_Server_API['host']
         res = session.post(url=nexturl, headers=headers)
@@ -236,6 +240,7 @@ class Util:  # 统一的类
             "userId": user['username'],
         }
         headers = {
+            'tenantId': '1019318364515869',  # ccut
             'User-Agent': 'Mozilla/5.0 (Linux; Android 7.1.1; MI 6 Build/NMF26X; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/61.0.3163.98 Mobile Safari/537.36 okhttp/3.12.4',
             'CpdailyStandAlone': '0',
             'Cpdaily-Extension': Util.DESEncrypt(json.dumps(extension)),
@@ -254,7 +259,7 @@ class Util:  # 统一的类
             'Host': School_Server_API['host'],
             'Accept': 'application/json, text/plain, */*',
             'X-Requested-With': 'XMLHttpRequest',
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 7.1.1; MI 6 Build/NMF26X; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/61.0.3163.98 Mobile Safari/537.36  cpdaily/8.2.22 wisedu/8.2.22',
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 7.1.1; MI 6 Build/NMF26X; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/61.0.3163.98 Mobile Safari/537.36  cpdaily/9.0.7 wisedu/9.0.7',
             'Content-Type': 'application/json',
             'Accept-Encoding': 'gzip,deflate',
             'Accept-Language': 'zh-CN,en-US;q=0.8',
@@ -289,21 +294,17 @@ class Util:  # 统一的类
     # 通过pushplus推送消息
 
     @staticmethod
-    def SendMessage(title: str, content: str, topic='', ctype='html'):
-        if PUSHPLUS_token == '':
-            Util.log("未配置pushplus的token，消息不会推送")
+    def SendMessage(title: str, content: str,):
+        if QMSG_KEY == '':
+            Util.log("未配置QMSG酱，消息不会推送")
             return False
         data = {
-            'token': PUSHPLUS_token,
-            'title': title,
-            'content': content,
-            'topic': topic,
-            'template': ctype
+            'token': QMSG_KEY,
+            'msg': title+"\n"+content,
         }
         try:
             res = requests.post(
-                url='https://pushplus.hxtrip.com/send', data=data)
-            Util.log(res.json()['msg'])
+                url='https://qmsg.zendee.cn/send/{}'.format(QMSG_KEY), data=data)
         except:
             Util.log('发送失败')
 
@@ -365,7 +366,8 @@ class TaskModel:
         else:
             Util.log('获取{}任务详情时出错,原因是'.format(self.Showname)+res['message'])
             return None
-    def GetSignedInfo(self,day=1):
+
+    def GetSignedInfo(self, day=1):
         # 默认获取前一天的签到信息
         data = {"statisticYearMonth": Util.GetDate('%Y-%m', day)}
         headers = Util.GenNormalHears(self.School_Server_API)
@@ -379,10 +381,13 @@ class TaskModel:
         yesterday = Util.GetDate('%Y-%m-%d', day)
         if len(signdays) == 0:
             return []
+        yesterday_info = {}
         for signday in signdays:
             if signday['dayInMonth'] == yesterday:
                 yesterday_info = signday
                 break
+        if len(yesterday_info) == 0:
+            return []
         yesterday_signed = yesterday_info['signedTasks']
         params = {}
         signedTasksInfo = []
@@ -393,14 +398,108 @@ class TaskModel:
             if info:
                 signedTasksInfo.append(info)
         return signedTasksInfo
+
     def CheckSuccess(self):
-        all_tasks=self.GetTasks()
+        all_tasks = self.GetTasks()
         if self.real_taskname not in all_tasks['unSignedTasks']:
             return True
         else:
             return False
 
+    def Go(self, session=None, userBaseInfo=None, config=None, School_Server_API=None, doleave=False):
+        if session:
+            self.UpdateInfo(session, userBaseInfo, School_Server_API)
+        signedinfo = self.GetSignedInfo()
+        autoconfig = self.GenConfig(signedinfo)
+        if config:
+            autoconfig.update(config)
+        tasks = self.GetTasks()
+        todotaskstype = []
+        if len(tasks['unSignedTasks']) > 0:
+            text = '未完成的{}任务:'.format(self.Showname)
+            for i, task in enumerate(tasks['unSignedTasks']):
+                text = text+str(i+1)+'.'+task['taskName']+' '
+            Util.log(text)
+            todotaskstype.append('unSignedTasks')
+        if len(tasks['leaveTasks']) > 0:
+            text = '请假的{}任务:'.format(self.Showname)
+            for i, task in enumerate(tasks['leaveTasks']):
+                text = text+str(i+1)+'.'+task['taskName']+' '
+            Util.log(text)
+            if doleave:
+                todotaskstype.append('leaveTasks')
+            else:
+                Util.log('跳过请假任务"{}"'.format(task['taskName']))
+        for todotype in todotaskstype:
+            for i in range(0, len(tasks[todotype])):
+                todoTask = tasks[todotype][i]
+                params = {
+                    'signInstanceWid': todoTask['signInstanceWid'],
+                    'signWid': todoTask['signWid']
+                }
+                taskDetail = self.GetDetailTask(params)
+                # 判断是否配置某个打卡选项
+                if taskDetail['taskName'] not in autoconfig:
+                    Util.log('"{}"昨天不存在或未签到'.format(taskDetail['taskName']))
+                    Util.log("开始回滚以获取签到信息")
+                    for i in range(30):
+                        Util.log("回滚{}天".format(str(i+2)))
+                        signedinfo = self.GetSignedInfo(i+2)
+                        autoconfig = self.GenConfig(signedinfo)
+                        if taskDetail['taskName'] in autoconfig:
+                            Util.log("获取到签到信息，继续进行签到")
+                            break
+                if taskDetail['taskName'] not in autoconfig:
+                    Util.log("回滚一月仍未获取到签到信息，可能是新发布的任务，跳过")
+                    continue
+                # 判断是否在签到时间
+                t = Util.TimeCheck(taskDetail)
+                if t != 0 and t > 60:  # 超过60秒则不再休眠
+                    Util.log('"'+taskDetail['taskName']+'"'+"目前不在签到时间，跳过")
+                    continue
+                Form = self.fillForm(taskDetail, autoconfig)
+                if Form == None:
+                    continue
+                submitinfo = {
+                    'username': self.userBaseInfo['username'],
+                    'lon': autoconfig[taskDetail['taskName']]['lon'],
+                    'lat': autoconfig[taskDetail['taskName']]['lat'],
+                    'deviceId': self.userBaseInfo['deviceId']
+                }
+                if t > 0:
+                    t = t+DELAY
+                    Util.log("休眠{}s后开始签到".format(str(t)))
+                    time.sleep(t)
+                self.real_taskname = taskDetail['taskName']
+                self.submitForm(submitinfo, Form)
     # 模板下面的函数根据对应任务实现
+
+    def submitForm(self, config, form):
+        res = self.session.post(
+            url=self.API['Submit'].format(host=self.School_Server_API['host']),
+            headers=Util.GenHeadersWithExtension(
+                config, self.School_Server_API),
+            data=json.dumps(form)
+        )
+        message = res.json()['message']
+        if message == 'SUCCESS':
+            if not self.CheckSuccess():
+                message = '提交信息成功，但任务仍为未签到状态'
+                Util.log(message)
+                Util.SendMessage("今日校园自动{}失败".format(self.Showname), "自动{}失败，原因是：".format(self.Showname) +
+                                 message+" 请手动签到，等待更新")
+                return False
+            Util.log('自动{}成功'.format(self.Showname))
+            if PUSH_LEVEL == 1:
+                Util.SendMessage(
+                    "自动{}成功".format(self.Showname), '"{}"已自动完成'.format(self.real_taskname))
+            return True
+        else:
+            Util.log('自动{}失败，原因是：'.format(self.Showname) + message)
+            if PUSH_LEVEL < 2:
+                Util.SendMessage("今日校园自动{}失败".format(self.Showname), "自动签到失败，原因是：" +
+                                 message+" ,请手动签到，等待更新")
+            return False
 
     def GenConfig(self, signedTasksInfo):
         pass
@@ -408,14 +507,10 @@ class TaskModel:
     def fillForm(self, task, config):
         pass
 
-    def submitForm(self, config):
-        pass
 
-    def Go(self, session=None, userBaseInfo=None, config=None, School_Server_API=None):
-        pass
+
+
 # 签到
-
-
 class Sign(TaskModel):
     def __init__(self, School_Server_API, session, userBaseInfo):
         super().__init__('Sign', School_Server_API, '签到', session, userBaseInfo)
@@ -450,7 +545,7 @@ class Sign(TaskModel):
                 return None
         else:
             form['signPhotoUrl'] = ''
-    # 判断是否需要提交附加信息
+        # 判断是否需要提交附加信息
         if task['isNeedExtra'] == 1:
             extraFields = task['extraField']
             # 根据设定内容填充表格
@@ -482,100 +577,9 @@ class Sign(TaskModel):
         form['signVersion'] = '1.0.0'
         return form
 
-    def submitForm(self, config, form):
-        res = self.session.post(
-            url=self.API['Submit'].format(host=self.School_Server_API['host']),
-            headers=Util.GenHeadersWithExtension(
-                config, self.School_Server_API),
-            data=json.dumps(form)
-        )
-        message = res.json()['message']
-        if message == 'SUCCESS':
-            if not self.CheckSuccess():
-                message='提交信息成功，但任务仍为未签到状态'
-                Util.log(message)
-                Util.SendMessage("今日校园自动签到失败", "自动签到失败，原因是：" +
-                    message+" 请手动签到，等待更新")
-                return False
-            Util.log('自动签到成功')
-            if PUSH_LEVEL == 1:
-                Util.SendMessage(
-                    "自动签到成功", '"{}"已自动完成'.format(self.real_taskname))
-            return True
-        else:
-            Util.log('自动签到失败，原因是：' + message)
-            if PUSH_LEVEL < 2:
-                Util.SendMessage("今日校园自动签到失败", "自动签到失败，原因是：" +
-                                 message+" ,请手动签到，等待更新")
-            return False
-    # 指定config的参数会覆盖自动生成的参数
 
-    def Go(self, session=None, userBaseInfo=None, config=None, School_Server_API=None):
-        if session:
-            self.UpdateInfo(session, userBaseInfo, School_Server_API)
-        signedinfo = self.GetSignedInfo()
-        autoconfig = self.GenConfig(signedinfo)
-        if config:
-            autoconfig.update(config)
-        tasks = self.GetTasks()
-        todotaskstype = []
-        if len(tasks['unSignedTasks']) > 0:
-            text = '未完成的签到任务:'
-            for i, task in enumerate(tasks['unSignedTasks']):
-                text = text+str(i+1)+'.'+task['taskName']+' '
-            Util.log(text)
-            todotaskstype.append('unSignedTasks')
-        if len(tasks['leaveTasks']) > 0:
-            text = '请假的签到任务:'
-            for i, task in enumerate(tasks['leaveTasks']):
-                text = text+str(i+1)+'.'+task['taskName']+' '
-            Util.log(text)
-            todotaskstype.append('leaveTasks')
-        for todotype in todotaskstype:
-            for i in range(0, len(tasks[todotype])):
-                todoTask = tasks[todotype][i]
-                params = {
-                    'signInstanceWid': todoTask['signInstanceWid'],
-                    'signWid': todoTask['signWid']
-                }
-                taskDetail = self.GetDetailTask(params)
-                # 判断是否配置某个打卡选项
-                if taskDetail['taskName'] not in autoconfig:
-                    Util.log('"{}"昨天不存在或未签到'.format(taskDetail['taskName']))
-                    Util.log("开始回滚以获取签到信息")
-                    for i in range(30):
-                        Util.log("回滚{}天".format(str(i+2)))
-                        signedinfo=self.GetSignedInfo(i+2)
-                        autoconfig=self.GenConfig(signedinfo)
-                        if taskDetail['taskName'] in autoconfig:
-                            Util.log("获取到签到信息，继续进行签到")
-                            break
-                if taskDetail['taskName'] not in autoconfig:
-                    Util.log("回滚一月仍未获取到签到信息，可能是新发布的任务，跳过")
-                    continue
-                # 判断是否在签到时间
-                t = Util.TimeCheck(taskDetail)
-                if t != 0 and t > 60:  # 超过60秒则不再休眠
-                    Util.log('"'+taskDetail['taskName']+'"'+"目前不在签到时间，跳过")
-                    continue
-                Form = self.fillForm(taskDetail, autoconfig)
-                if Form == None:
-                    continue
-                submitinfo = {
-                    'username': self.userBaseInfo['username'],
-                    'lon': autoconfig[taskDetail['taskName']]['lon'],
-                    'lat': autoconfig[taskDetail['taskName']]['lat'],
-                    'deviceId': self.userBaseInfo['deviceId']
-                }
-                if t > 0:
-                    t = t+DELAY
-                    Util.log("休眠{}s后开始签到".format(str(t)))
-                    time.sleep(t)
-                self.real_taskname = taskDetail['taskName']
-                self.submitForm(submitinfo, Form)
+
 # 查寝
-
-
 class Attendance(TaskModel):
     def __init__(self, School_Server_API, session, userBaseInfo):
         super().__init__('Attendance', School_Server_API, '查寝', session, userBaseInfo)
@@ -613,96 +617,6 @@ class Attendance(TaskModel):
         form['uaIsCpadaily'] = True
         return form
 
-    def submitForm(self, config, form):
-        res = self.session.post(
-            url=self.API['Submit'].format(host=self.School_Server_API['host']),
-            headers=Util.GenHeadersWithExtension(
-                config, self.School_Server_API),
-            data=json.dumps(form)
-        )
-        message = res.json()['message']
-        if message == 'SUCCESS':
-            if not self.CheckSuccess():
-                message='提交信息成功，但任务仍为未签到状态'
-                Util.log(message)
-                Util.SendMessage("今日校园自动查寝失败", "自动查寝失败，原因是：" +
-                    message+" 请手动签到，等待更新")
-                return False
-            Util.log('自动查寝成功')
-            if PUSH_LEVEL == 1:
-                Util.SendMessage(
-                    "自动查寝成功", '"{}"已自动完成'.format(self.real_taskname))
-            return True
-        else:
-            Util.log('自动查寝失败，原因是：' + message)
-            if PUSH_LEVEL < 2:
-                Util.SendMessage("今日校园自动查寝失败", "自动查寝失败，原因是：" +
-                                 message+" 请手动签到，等待更新")
-            return False
-    # 指定config的参数会覆盖自动生成的参数
-
-    def Go(self, session=None, userBaseInfo=None, config=None, School_Server_API=None):
-        if session:
-            self.UpdateInfo(session, userBaseInfo, School_Server_API)
-        signedinfo = self.GetSignedInfo()
-        autoconfig = self.GenConfig(signedinfo)
-        if config:
-            autoconfig.update(config)
-        tasks = self.GetTasks()
-        todotaskstype = []
-        if len(tasks['unSignedTasks']) > 0:
-            text = '未完成的查寝任务:'
-            for i, task in enumerate(tasks['unSignedTasks']):
-                text = text+str(i+1)+'.'+task['taskName']+' '
-            Util.log(text)
-            todotaskstype.append('unSignedTasks')
-        if len(tasks['leaveTasks']) > 0:
-            text = '请假的查寝任务:'
-            for i, task in enumerate(tasks['leaveTasks']):
-                text = text+str(i+1)+'.'+task['taskName']+' '
-            Util.log(text)
-            todotaskstype.append('leaveTasks')
-        for todotype in todotaskstype:
-            for i in range(0, len(tasks[todotype])):
-                todoTask = tasks[todotype][i]
-                params = {
-                    'signInstanceWid': todoTask['signInstanceWid'],
-                    'signWid': todoTask['signWid']
-                }
-                taskDetail = self.GetDetailTask(params)
-                if taskDetail['taskName'] not in autoconfig:
-                    Util.log('"{}"昨天不存在或未签到，跳过'.format(taskDetail['taskName']))
-                    Util.log("开始回滚以获取签到信息")
-                    for i in range(30):
-                        Util.log("回滚{}天".format(str(i+2)))
-                        signedinfo=self.GetSignedInfo(i+2)
-                        autoconfig=self.GenConfig(signedinfo)
-                        if taskDetail['taskName'] in autoconfig:
-                            Util.log("获取到签到信息，继续进行签到")
-                            break
-                if taskDetail['taskName'] not in autoconfig:
-                    Util.log("回滚一月仍未获取到签到信息，可能是新发布的任务，跳过")
-                    continue
-                # 判断是否在签到时间
-                t = Util.TimeCheck(taskDetail)
-                if t != 0 and t > 60:  # 超过60秒则不再休眠
-                    Util.log('"'+taskDetail['taskName']+'"'+"目前不在签到时间，跳过")
-                    continue
-                Form = self.fillForm(taskDetail, autoconfig)
-                if Form == None:
-                    continue
-                submitinfo = {
-                    'username': self.userBaseInfo['username'],
-                    'lon': autoconfig[taskDetail['taskName']]['lon'],
-                    'lat': autoconfig[taskDetail['taskName']]['lat'],
-                    'deviceId': self.userBaseInfo['deviceId']
-                }
-                if t > 0:
-                    t = t+DELAY
-                    Util.log("休眠{}s后开始签到".format(str(t)))
-                    time.sleep(t)
-                self.real_taskname = taskDetail['taskName']
-                self.submitForm(submitinfo, Form)
 
 
 def Do(School_Server_API, user):
@@ -716,13 +630,13 @@ def Do(School_Server_API, user):
         Signer = Sign(School_Server_API, session, userBaseInfo)
         Attendancer = Attendance(School_Server_API, session, userBaseInfo)
         try:
-            Signer.Go()
+            Signer.Go(doleave=True)
         except:
             Util.log("签到过程中出现异常")
             if PUSH_LEVEL < 2:
                 Util.SendMessage("今日校园签到失败", "签到过程中出现异常，请手动签到")
         try:
-            Attendancer.Go()
+            Attendancer.Go(doleave=False)
         except:
             Util.log("查寝过程中出现异常")
             if PUSH_LEVEL < 2:
