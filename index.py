@@ -650,8 +650,8 @@ def Do(School_Server_API, user):
 
 def main():
     School_Server_API = {
-        'login-url': 'https://swu.campusphere.net/iap/login?service=https%3A%2F%2Fswu.campusphere.net%2Fportal%2Flogin',
-        'host': 'swu.campusphere.net'
+        'login-url': 'https://ccut.campusphere.net/iap/login?service=https%3A%2F%2Fccut.campusphere.net%2Fportal%2Flogin',
+        'host': 'ccut.campusphere.net'
     }
     user = {
         'username': USERNAME,
