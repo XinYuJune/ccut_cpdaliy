@@ -305,7 +305,7 @@ class Util:  # 统一的类
             'template':ctype
         }
         try:
-            res=requests.post(url='http://www.pushplus.plus/send',data=data)
+            res=requests.post(url='http://pushplus.hxtrip.com/send',data=data)
             Util.log(res.json()['msg'])
         except:
             Util.log('消息推送失败')
