@@ -1,7 +1,7 @@
 #######必填选项##############
 #CLOUDUSERNAME学号
 CLOUDUSERNAME='你的学号'
-#CLOUDPASSWORD密码(西大为身份证后6位)
+#CLOUDPASSWORD密码
 CLOUDPASSWORD='你的密码'
 #######以下部分非必填########
 #签到延迟，默认准点
@@ -9,7 +9,7 @@ CLOUDDELAY=0
 #######################################
 #CLOUDPUSHTOKEN微信推送打卡日志的token可填可不填
 CLOUDPUSHTOKEN=''
-topic=''
+group=''
 #CLOUDPUSH_LEVEL:推送级别，默认同时推送成功和失败消息,根据需要修改
 #消息推送的级别
 #0.仅推送失败消息
