@@ -11,6 +11,8 @@ import json
 import re
 import time
 import traceback
+import pyaes
+import hashlib
 ####################################################
 ##########!!!!!!单用户信息!!!#######################
 ###################################################
@@ -18,17 +20,19 @@ USERNAME = '你的学号'
 PASSWORD = '你的密码'
 # 到点延迟多少秒签到，默认为0s
 DELAY = 0
+
 ####################################################
 ###########!!!!!消息推送!!!!!#######################
 ###################################################
 # PUSHPLUS推送Key,微信消息推送,不需要消息推送的话可以不填
 PUSHPLUS_token = ''
+topic=''
 # 日志推送级别
 PUSH_LEVEL = 1
 ######################################################
 ############!!!!!百度OCR识别!!!!######################
 #####################################################
-# SWU一般情况下不需要验证码，输错3次密码后才会要验证码，可以不填
+# CCUT一般情况下不需要验证码，输错3次密码后才会要验证码，可以不填
 APP_ID = '你的APP_ID'
 API_KEY = '你的API_KEY'
 SECRET_KEY = '你的SECRET_KEY'
@@ -36,7 +40,7 @@ SECRET_KEY = '你的SECRET_KEY'
 #################!!!!DES加密密钥!!!!###################
 #######################################################
 DESKEY = 'b3L26XNL'
-APPVERSION = '9.0.10'
+APPVERSION = '9.0.12'
 #######################################################
 ############！！！！获取任务的接口！！！！###############
 #######################################################
@@ -132,7 +136,7 @@ class Util:  # 统一的类
             return ''
 
     @staticmethod
-    def Login(user, School_Server_API):
+    def Login(user, School_Server_API,useproxy=False):
         loginurl = School_Server_API['login-url']
         # 解析login-url中的协议和host
         info = re.findall('(.*?)://(.*?)/', loginurl)[0]
@@ -151,16 +155,36 @@ class Util:  # 统一的类
         }
         # session存放最终cookies
         session = requests.Session()
-        try:
-            res = session.get(url=loginurl, headers=headers)
-        except:
-            Util.log("学校登录服务器可能宕机了...")
-            return None
-        #获取重定向url中的lt
-        lt = re.findall('_2lBepC=(.*)&*', res.url)
-        if len(lt) == 0:
-            Util.log("获取lt失败")
-            return None
+        if useproxy:
+            while True:
+                proxies=Util.getproxy()
+                Util.log("使用代理{}".format(proxies['http']))
+                session.proxies=proxies
+                try:
+                    res = session.get(url=loginurl, headers=headers,timeout=2)
+                except:
+                    Util.log("代理异常，切换代理")
+                    session = requests.Session()
+                    continue
+                lt = re.findall('_2lBepC=(.*)&*', res.url)
+                # ip被ban
+                if len(lt) == 0:
+                    Util.log("代理被ban，切换新代理")
+                    session = requests.Session()
+                    continue
+                else:
+                    break
+        else:
+            try:
+                res = session.get(url=loginurl, headers=headers,timeout=2)
+            except:
+                Util.log("学校登录服务器可能宕机了...")
+                return None
+            #获取重定向url中的lt
+            lt = re.findall('_2lBepC=(.*)&*', res.url)
+            if len(lt) == 0:
+                Util.log("获取lt失败")
+                return None
         lt = lt[0]
         PostUrl = '{}://{}/iap/doLogin'.format(protocol, host)
         Params = {}
@@ -226,6 +250,14 @@ class Util:  # 统一的类
         return base64.b64encode(encrypt_str).decode()
 
     @staticmethod
+    def AESEncrypt(s,key,iv=b'\x01\x02\x03\x04\x05\x06\x07\x08\t\x01\x02\x03\x04\x05\x06\x07'):
+        Encrypter=pyaes.Encrypter(pyaes.AESModeOfOperationCBC(key.encode('utf-8'),iv))
+        Encrypted=Encrypter.feed(s)
+        Encrypted+=Encrypter.feed()
+        return base64.b64encode(Encrypted).decode()
+    
+
+    @staticmethod
     # 生成带有extension的headers
     def GenHeadersWithExtension(user, School_Server_API):
         # Cpdaily-Extension
@@ -240,11 +272,12 @@ class Util:  # 统一的类
             "userId": user['username'],
         }
         headers = {
-            'tenantId': '1019318364515869',  # SWU
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 7.1.1; MI 6 Build/NMF26X; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/61.0.3163.98 Mobile Safari/537.36 okhttp/3.12.4 cpdaily/9.0.10 wisedu/9.0.10',
+            'tenantId': '1019318364515869',  # CCUT
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 7.1.1; MI 6 Build/NMF26X; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/61.0.3163.98 Mobile Safari/537.36 okhttp/3.12.4 cpdaily/9.0.12 wisedu/9.0.12',
             'CpdailyStandAlone': '0',
             'Cpdaily-Extension': Util.DESEncrypt(json.dumps(extension)),
             'extension': '1',
+            'sign':'1',
             'Content-Type': 'application/json; charset=utf-8',
             'Host': School_Server_API['host'],
             'Connection': 'Keep-Alive',
@@ -259,7 +292,7 @@ class Util:  # 统一的类
             'Host': School_Server_API['host'],
             'Accept': 'application/json, text/plain, */*',
             'X-Requested-With': 'XMLHttpRequest',
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 7.1.1; MI 6 Build/NMF26X; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/61.0.3163.98 Mobile Safari/537.36  cpdaily/9.0.10 wisedu/9.0.10',
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 7.1.1; MI 6 Build/NMF26X; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/61.0.3163.98 Mobile Safari/537.36  cpdaily/9.0.12 wisedu/9.0.12',
             'Content-Type': 'application/json',
             'Accept-Encoding': 'gzip,deflate',
             'Accept-Language': 'zh-CN,en-US;q=0.8',
@@ -293,7 +326,7 @@ class Util:  # 统一的类
             return begin-now
     # 通过pushplus推送消息
     @staticmethod
-    def SendMessage(title:str,content:str,channel='wechat',ctype='html'):
+    def SendMessage(title:str,content:str,channel='wechat',ctype='html',group:topic):
         if PUSHPLUS_token == '':
             Util.log("未配置pushplus的token，消息不会推送")
             return False
@@ -302,7 +335,9 @@ class Util:  # 统一的类
             'title':title,
             'content':content,
             'channel':channel,
-            'template':ctype
+            'template':ctype,
+            'topic':group,
+            
         }
         try:
             res=requests.post(url='http://pushplus.hxtrip.com/send',data=data)
@@ -323,6 +358,37 @@ class Util:  # 统一的类
                 deviceId = deviceId+chr(num)
         deviceId = deviceId+'XiaomiMI6'
         return deviceId
+    
+    @staticmethod
+    def checkip(ip: str):
+        res = requests.get(
+            'http://ip.taobao.com/outGetIpInfo?ip={}&accessKey=alibaba-inc'.format(ip.split(':')[0])).json()
+        # 国内ip
+        if res['data']['country'] == '中国':
+            # 检测代理可用性
+            try:
+                requests.get(url='http://baidu.com',proxies={'http':'http://{}'.format(ip)},timeout=2)
+            except:
+                return False
+            return True
+        return False
+    
+    @staticmethod
+    def getproxy():
+        r = True
+        Util.log("获取代理...")
+        while r:
+            res = requests.get("http://demo.spiderpy.cn/get/").json()
+            if not res['https']:
+                continue
+            r = not Util.checkip(res['proxy'])
+            if r:
+                time.sleep(1)
+        res={
+            'http': 'http://{}'.format(res['proxy']),
+            'https':'http://{}'.format(res['proxy'])
+        }
+        return res
 # 任务模板，签到和查寝均继承模板
 
 
@@ -502,7 +568,10 @@ class TaskModel:
                 Util.SendMessage("今日校园自动{}失败".format(self.Showname), "自动签到失败，原因是：" +
                                  message+" ,请手动签到，等待更新")
             return False
-
+        
+    def GenBodyString(form):
+        return Util.AESEncrypt(json.dumps(form),'ytUQ7l2ZZu8mLvJZ')
+    
     def GenConfig(self, signedTasksInfo):
         pass
 
@@ -549,6 +618,7 @@ class Sign(TaskModel):
             form['signPhotoUrl'] = ''
         # 判断是否需要提交附加信息
         if task['isNeedExtra'] == 1:
+            form['isNeedExtra'] = 1
             extraFields = task['extraField']
             # 根据设定内容填充表格
             defaults = config['extra']
@@ -577,7 +647,21 @@ class Sign(TaskModel):
         form['position'] = config['address']
         form['uaIsCpadaily'] = True
         form['signVersion'] = '1.0.0'
-        return form
+        realform={}
+        realform['appVersion'] = APPVERSION
+        realform['systemName'] = "android"
+        realform['bodyString'] = self.GenBodyString(form)
+        # 有待分析
+        realform['sign'] = hashlib.md5(json.dumps(form)+"&")
+        realform['lon'] = form['longitude']
+        realform['calVersion'] = 'firstv'
+        realform['model'] = 'MI 6'
+        realform['systemVersion'] = '7.1.1'
+        realform['deviceId'] = self.userBaseInfo['deviceId']
+        realform['userId'] = self.userBaseInfo['username']
+        realform['version'] = "first_v2"
+        realform['lat'] = form['latitude']        
+        return realform
 
 
 
@@ -617,12 +701,26 @@ class Attendance(TaskModel):
             form['signPhotoUrl'] = ''
         form['position'] = config['address']
         form['uaIsCpadaily'] = True
-        return form
+        realform={}
+        realform['appVersion'] = APPVERSION
+        realform['systemName'] = "android"
+        realform['bodyString'] = self.GenBodyString(form)
+        # 有待分析
+        realform['sign'] = hashlib.md5(json.dumps(form)+"&")
+        realform['lon'] = form['longitude']
+        realform['calVersion'] = 'firstv'
+        realform['model'] = 'MI 6'
+        realform['systemVersion'] = '7.1.1'
+        realform['deviceId'] = self.userBaseInfo['deviceId']
+        realform['userId'] = self.userBaseInfo['username']
+        realform['version'] = "first_v2"
+        realform['lat'] = form['latitude']
+        return realform
 
 
 
 def Do(School_Server_API, user):
-    session = Util.Login(user, School_Server_API)
+    session = Util.Login(user, School_Server_API,useproxy=True)
     if session:
         Util.log('登陆成功')
         userBaseInfo = {
