@@ -20,19 +20,18 @@ USERNAME = '你的学号'
 PASSWORD = '你的密码'
 # 到点延迟多少秒签到，默认为0s
 DELAY = 0
-
 ####################################################
 ###########!!!!!消息推送!!!!!#######################
 ###################################################
 # PUSHPLUS推送Key,微信消息推送,不需要消息推送的话可以不填
 PUSHPLUS_token = ''
-group = ''
+group=''
 # 日志推送级别
 PUSH_LEVEL = 1
 ######################################################
 ############!!!!!百度OCR识别!!!!######################
 #####################################################
-# CCUT一般情况下不需要验证码，输错3次密码后才会要验证码，可以不填
+# 一般情况下不需要验证码，输错3次密码后才会要验证码，可以不填
 APP_ID = '你的APP_ID'
 API_KEY = '你的API_KEY'
 SECRET_KEY = '你的SECRET_KEY'
@@ -40,6 +39,7 @@ SECRET_KEY = '你的SECRET_KEY'
 #################!!!!DES加密密钥!!!!###################
 #######################################################
 DESKEY = 'b3L26XNL'
+AESKEY = 'ytUQ7l2ZZu8mLvJZ'
 APPVERSION = '9.0.12'
 #######################################################
 ############！！！！获取任务的接口！！！！###############
@@ -272,7 +272,7 @@ class Util:  # 统一的类
             "userId": user['username'],
         }
         headers = {
-            'tenantId': '1019318364515869',  # CCUT
+            'tenantId': '1019318364515869',  # SWU
             'User-Agent': 'Mozilla/5.0 (Linux; Android 7.1.1; MI 6 Build/NMF26X; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/61.0.3163.98 Mobile Safari/537.36 okhttp/3.12.4 cpdaily/9.0.12 wisedu/9.0.12',
             'CpdailyStandAlone': '0',
             'Cpdaily-Extension': Util.DESEncrypt(json.dumps(extension)),
@@ -335,9 +335,7 @@ class Util:  # 统一的类
             'title':title,
             'content':content,
             'channel':channel,
-            'template':ctype,
-            'topic':group,
-            
+            'template':ctype
         }
         try:
             res=requests.post(url='http://pushplus.hxtrip.com/send',data=data)
@@ -569,8 +567,28 @@ class TaskModel:
                                  message+" ,请手动签到，等待更新")
             return False
         
-    def GenBodyString(form):
-        return Util.AESEncrypt(json.dumps(form),'ytUQ7l2ZZu8mLvJZ')
+    def GenBodyString(self,form):
+        return Util.AESEncrypt(json.dumps(form),AESKEY)
+    
+    def SignForm(self,realform):
+        tosign={
+            "appVersion":APPVERSION,
+            "bodyString":realform['bodyString'],
+            "deviceId":realform["deviceId"],
+            "lat":realform["lat"],
+            "lon":realform["lon"],
+            "model":realform["model"],
+            "systemName":realform["systemName"],
+            "systemVersion":realform["systemVersion"],
+            "userId":realform["userId"],   
+        }
+        signStr=""
+        for i in tosign:
+            if signStr:
+                signStr+="&"
+            signStr+="{}={}".format(i,tosign[i])
+        signStr+="&{}".format(AESKEY)
+        return hashlib.md5(signStr.encode()).hexdigest()
     
     def GenConfig(self, signedTasksInfo):
         pass
@@ -651,8 +669,6 @@ class Sign(TaskModel):
         realform['appVersion'] = APPVERSION
         realform['systemName'] = "android"
         realform['bodyString'] = self.GenBodyString(form)
-        # 有待分析
-        realform['sign'] = hashlib.md5(json.dumps(form)+"&")
         realform['lon'] = form['longitude']
         realform['calVersion'] = 'firstv'
         realform['model'] = 'MI 6'
@@ -660,7 +676,8 @@ class Sign(TaskModel):
         realform['deviceId'] = self.userBaseInfo['deviceId']
         realform['userId'] = self.userBaseInfo['username']
         realform['version'] = "first_v2"
-        realform['lat'] = form['latitude']        
+        realform['lat'] = form['latitude']
+        realform['sign'] = self.SignForm(realform)
         return realform
 
 
@@ -705,8 +722,6 @@ class Attendance(TaskModel):
         realform['appVersion'] = APPVERSION
         realform['systemName'] = "android"
         realform['bodyString'] = self.GenBodyString(form)
-        # 有待分析
-        realform['sign'] = hashlib.md5(json.dumps(form)+"&")
         realform['lon'] = form['longitude']
         realform['calVersion'] = 'firstv'
         realform['model'] = 'MI 6'
@@ -715,6 +730,7 @@ class Attendance(TaskModel):
         realform['userId'] = self.userBaseInfo['username']
         realform['version'] = "first_v2"
         realform['lat'] = form['latitude']
+        realform['sign'] = self.SignForm(realform)
         return realform
 
 
