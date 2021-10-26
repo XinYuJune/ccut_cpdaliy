@@ -9,6 +9,7 @@ CLOUDDELAY=0
 #######################################
 #CLOUDPUSHTOKEN微信推送打卡日志的token可填可不填
 CLOUDPUSHTOKEN=''
+topic=''
 #CLOUDPUSH_LEVEL:推送级别，默认同时推送成功和失败消息,根据需要修改
 #消息推送的级别
 #0.仅推送失败消息
