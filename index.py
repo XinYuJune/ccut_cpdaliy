@@ -25,13 +25,12 @@ DELAY = 0
 ###################################################
 # PUSHPLUS推送Key,微信消息推送,不需要消息推送的话可以不填
 PUSHPLUS_token = ''
-group=''
 # 日志推送级别
 PUSH_LEVEL = 1
 ######################################################
 ############!!!!!百度OCR识别!!!!######################
 #####################################################
-# 一般情况下不需要验证码，输错3次密码后才会要验证码，可以不填
+# ccut一般情况下不需要验证码，输错3次密码后才会要验证码，可以不填
 APP_ID = '你的APP_ID'
 API_KEY = '你的API_KEY'
 SECRET_KEY = '你的SECRET_KEY'
@@ -272,7 +271,7 @@ class Util:  # 统一的类
             "userId": user['username'],
         }
         headers = {
-            'tenantId': '1019318364515869',  # SWU
+            'tenantId': '1019318364515869',  # ccut
             'User-Agent': 'Mozilla/5.0 (Linux; Android 7.1.1; MI 6 Build/NMF26X; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/61.0.3163.98 Mobile Safari/537.36 okhttp/3.12.4 cpdaily/9.0.12 wisedu/9.0.12',
             'CpdailyStandAlone': '0',
             'Cpdaily-Extension': Util.DESEncrypt(json.dumps(extension)),
