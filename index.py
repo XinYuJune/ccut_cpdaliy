@@ -25,6 +25,7 @@ DELAY = 0
 ###################################################
 # PUSHPLUS推送Key,微信消息推送,不需要消息推送的话可以不填
 PUSHPLUS_token = ''
+group=''
 # 日志推送级别
 PUSH_LEVEL = 1
 ######################################################
@@ -325,7 +326,7 @@ class Util:  # 统一的类
             return begin-now
     # 通过pushplus推送消息
     @staticmethod
-    def SendMessage(title:str,content:str,channel='wechat',ctype='html'):
+    def SendMessage(title:str,content:str,channel='wechat',ctype='html',setGroup:group):
         if PUSHPLUS_token == '':
             Util.log("未配置pushplus的token，消息不会推送")
             return False
@@ -334,7 +335,8 @@ class Util:  # 统一的类
             'title':title,
             'content':content,
             'channel':channel,
-            'template':ctype
+            'template':ctype,
+            'topic':setGroup
         }
         try:
             res=requests.post(url='http://pushplus.hxtrip.com/send',data=data)
