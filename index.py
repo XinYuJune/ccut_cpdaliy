@@ -326,13 +326,13 @@ class Util:  # 统一的类
             return begin-now
     # 通过pushplus推送消息
     @staticmethod
-    def SendMessage(title:str,content:str,channel='wechat',ctype='html'):
+    def SendMessage(title:str,content:str,name:USERNAME,channel='wechat',ctype='html'):
         if PUSHPLUS_token == '':
             Util.log("未配置pushplus的token，消息不会推送")
             return False
         data={
             'token':PUSHPLUS_token,
-            'title':USERNAME+title,
+            'title':name+title,
             'content':content,
             'channel':channel,
             'template':ctype,
