@@ -93,7 +93,7 @@ MAX_Captcha_Times = 20
 
 
 class Util:  # 统一的类
-    logs = 'V2021.6.17'
+    logs = 'V2021.6.17'+'\n'+USERNAME
     OCRclient = None
 
     @staticmethod
@@ -774,7 +774,7 @@ def main():
     }
     Do(School_Server_API, user)
     if (PUSH_LEVEL > 1):
-        Util.SendMessage(USERNAME, Util.logs)
+        Util.SendMessage('签到日志', Util.logs)
 # 提供给腾讯云函数调用的启动函数
 
 
