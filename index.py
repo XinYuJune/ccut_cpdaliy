@@ -774,7 +774,7 @@ def main():
     }
     Do(School_Server_API, user)
     if (PUSH_LEVEL > 1):
-        Util.SendMessage(username+'签到日志', Util.logs)
+        Util.SendMessage(USERNAME+'签到日志', Util.logs)
 # 提供给腾讯云函数调用的启动函数
 
 
