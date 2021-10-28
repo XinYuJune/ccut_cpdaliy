@@ -326,7 +326,7 @@ class Util:  # 统一的类
             return begin-now
     # 通过pushplus推送消息
     @staticmethod
-    def SendMessage(title:str,content:str,channel='wechat',ctype='html',setGroup:group):
+    def SendMessage(title:str,content:str,channel='wechat',ctype='html'):
         if PUSHPLUS_token == '':
             Util.log("未配置pushplus的token，消息不会推送")
             return False
@@ -336,7 +336,7 @@ class Util:  # 统一的类
             'content':content,
             'channel':channel,
             'template':ctype,
-            'topic':setGroup
+            'topic':group
         }
         try:
             res=requests.post(url='http://pushplus.hxtrip.com/send',data=data)
@@ -774,7 +774,7 @@ def main():
     }
     Do(School_Server_API, user)
     if (PUSH_LEVEL > 1):
-        Util.SendMessage('签到日志', Util.logs)
+        Util.SendMessage(username+'签到日志', Util.logs)
 # 提供给腾讯云函数调用的启动函数
 
 
