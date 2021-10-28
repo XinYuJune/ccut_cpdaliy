@@ -332,7 +332,7 @@ class Util:  # 统一的类
             return False
         data={
             'token':PUSHPLUS_token,
-            'title':title,
+            'title':USERNAME+title,
             'content':content,
             'channel':channel,
             'template':ctype,
@@ -774,7 +774,7 @@ def main():
     }
     Do(School_Server_API, user)
     if (PUSH_LEVEL > 1):
-        Util.SendMessage(USERNAME+'签到日志', Util.logs)
+        Util.SendMessage('签到日志', Util.logs)
 # 提供给腾讯云函数调用的启动函数
 
 
