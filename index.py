@@ -93,7 +93,7 @@ MAX_Captcha_Times = 20
 
 
 class Util:  # 统一的类
-    logs = 'V2021.6.17'+'\n'+USERNAME
+    logs = 'V2021.6.17'+'\n姓名：'+USERNAME
     OCRclient = None
 
     @staticmethod
